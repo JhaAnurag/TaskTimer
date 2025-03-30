@@ -260,7 +260,7 @@
           streak: 0,
           last_top_percentage: 95.2,
           total_time: 9000,
-        }
+        },
       };
 
       // --- DOM Element References ---
@@ -391,7 +391,7 @@
           const aheadCount = Math.floor(
             populationEstimate * (1 - aheadPercentage / 100)
           );
-          aheadMessage.textContent = `Ahead of ${aheadPercentage.toFixed(
+          aheadMessage.textContent = `${aheadPercentage.toFixed(
             1
           )}% (~${formatNumber(aheadCount)})`;
           aheadMessage.style.opacity = 1; // Make message visible
