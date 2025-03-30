@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minimal Task Timer</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Tailwind CSS Configuration
+      tailwind.config = {
+        theme: {
+          extend: {
+            // Custom color palette for dark theme
+            colors: {
+              "dark-bg": "#111827", // Main background
+              "dark-card": "#1F2937", // Card background
+              "dark-card-hover": "#374151", // Card hover background
+              "dark-text": "#E5E7EB", // Primary text
+              "dark-text-light": "#9CA3AF", // Secondary text
+              "dark-accent": "#A78BFA", // Main accent (used for timer, progress bar)
+              "dark-border": "#374151", // Borders
+              "dark-progress-bg": "#374151", // Progress bar background
+              "accent-indigo": "#A78BFA", // Category 1 accent
+              "accent-emerald": "#6EE7B7", // Category 2 accent
+              "accent-amber": "#FBBF24", // Category 3 accent
+              "accent-rose": "#FCA5A5", // Category 4 accent
+              "stop-red": "#F87171", // Stop button
+              "stop-red-hover": "#EF4444", // Stop button hover
+            },
+            // Custom monospace font
+            fontFamily: {
+              mono: ['"Source Code Pro"', "monospace"],
+            },
+            // Custom border radius values
+            borderRadius: {
+              "task-item": "0.375rem", // Specific radius for task items
+              "category-col": "0.5rem", // Specific radius for category columns
+            },
+          },
+        },
+      };
+    </script>
+    <!-- Google Fonts: Source Code Pro -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Base body styles */
+      body {
+        font-family: "Source Code Pro", monospace;
+        scroll-behavior: smooth; /* Smooth scrolling for anchor links (if any) */
+      }
+      /* Custom scrollbar styling for a consistent dark theme look */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1f2937;
+      } /* Scrollbar track color */
+      ::-webkit-scrollbar-thumb {
+        background: #4b5563;
+        border-radius: 4px;
+      } /* Scrollbar handle */
+      ::-webkit-scrollbar-thumb:hover {
+        background: #6b7280;
+      } /* Scrollbar handle on hover */
+
+      /* Style for text overlaid on the progress bar */
+      .progress-bar-text {
+        color: #e5e7eb;
+      }
+
+      /* Animation: Subtle fade-in for elements */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .fade-in {
+        opacity: 0;
+        animation: fadeIn 0.5s ease-in-out forwards;
+      }
+
+      /* Animation: Subtle slide-up and fade-in */
+      @keyframes slideUpFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .slide-up-fade-in {
+        opacity: 0;
+        animation: slideUpFadeIn 0.4s ease-out forwards;
+      }
+
+      /* Apply staggered animation delay to category columns */
+      .category-column:nth-child(1) {
+        animation-delay: 0.1s;
+      }
+      .category-column:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      .category-column:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+      .category-column:nth-child(4) {
+        animation-delay: 0.4s;
+      }
+
+      /* Apply subtle transition to task items on hover */
+      .task-item {
+        transition: background-color 0.2s ease-in-out,
+          transform 0.15s ease-in-out;
+      }
+      .task-item:hover {
+        transform: scale(1.02); /* Slightly grow on hover */
+      }
+    </style>
+  </head>
+  <body
+    class="bg-dark-bg text-dark-text min-h-screen font-mono pb-24 antialiased"
+  >
+    <div class="container mx-auto px-4 py-8">
+      <!-- Header Section -->
+      <header class="mb-10 text-center fade-in">
+        <h1 class="text-4xl font-semibold text-dark-accent">Hello!</h1>
+        <p class="text-xl text-dark-text-light mt-2" id="date-display">
+          Loading date...
+        </p>
+      </header>
+
+      <!-- Task Categories Grid -->
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        id="categories-container"
+      >
+        <!-- Categories and tasks will be dynamically inserted here by JavaScript -->
+      </div>
+
+      <!-- Task JSON Editor Section -->
+      <div
+        class="mt-12 bg-dark-card p-4 rounded-lg border border-dark-border fade-in"
+        style="animation-delay: 0.5s"
+      >
+        <h2 class="text-lg font-semibold mb-3">Edit Tasks (JSON)</h2>
+        <textarea
+          id="tasks-json-editor"
+          class="w-full h-40 bg-dark-card-hover border border-dark-border rounded p-3 text-dark-text font-mono text-sm focus:outline-none focus:ring-2 focus:ring-dark-accent resize-y"
+          placeholder="Paste or edit your task data in JSON format here..."
+        ></textarea>
+        <div class="mt-2 flex justify-end">
+          <button
+            id="save-tasks-button"
+            class="bg-dark-accent hover:bg-opacity-80 text-white px-4 py-2 rounded-md text-sm font-semibold transition-colors duration-200"
+          >
+            Save Tasks
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fixed Persistent Timer UI (Initially hidden, controlled by JS) -->
+    <div
+      id="timer-ui"
+      class="fixed bottom-0 left-0 right-0 bg-dark-card border-t border-dark-border p-3 opacity-0 pointer-events-none z-50 transition-all duration-500 ease-in-out transform translate-y-full"
+    >
+      <div
+        class="container mx-auto flex items-center justify-between gap-x-4 gap-y-2 flex-wrap"
+      >
+        <!-- Timer Display & Stop Button -->
+        <div class="flex items-center gap-3 flex-shrink-0">
+          <span
+            id="timer-display"
+            class="text-3xl font-semibold text-dark-accent w-24 text-center tabular-nums"
+            >00:00</span
+          >
+          <button
+            id="stop-button"
+            class="bg-stop-red hover:bg-stop-red-hover text-white px-3 py-1 rounded-md text-xs font-semibold tracking-wider transition-colors duration-200"
+          >
+            STOP
+          </button>
+        </div>
+
+        <!-- Progress Bar Area -->
+        <div class="w-full sm:flex-1 order-last sm:order-none min-w-[200px]">
+          <div
+            class="relative bg-dark-progress-bg h-5 rounded-full overflow-hidden flex items-center px-2"
+          >
+            <!-- Inner progress bar element, width controlled by JS -->
+            <div
+              id="progress-bar-inner"
+              class="absolute top-0 left-0 bg-dark-accent h-full rounded-full z-0 transition-[width] duration-500 ease-linear"
+              style="width: 0%"
+            ></div>
+            <!-- Text overlay on the progress bar -->
+            <div class="relative z-10 w-full flex justify-between items-center">
+              <span
+                id="ahead-message"
+                class="text-xs font-medium progress-bar-text truncate pr-2 opacity-0 transition-opacity duration-300 ease-in-out"
+              ></span>
+              <span
+                id="progress-percentage"
+                class="text-xs font-semibold progress-bar-text flex-shrink-0"
+                >0%</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Status Message (Right side) -->
+        <div
+          id="status-message"
+          class="text-sm text-dark-text-light text-center sm:text-right min-w-[150px] flex-shrink-0 order-first sm:order-last"
+        >
+          Select a task to begin.
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ==================================
+      // Minimal Task Timer Script
+      // ==================================
+
+      // --- Configuration & Constants ---
+
+      // Maps category keys (used in data) to display names
+      const CATEGORY_MAPPING = {
+        1: "Studies & Learning",
+        2: "Creative & Fun",
+        3: "Improvement & Care",
+        4: "Projects & Work",
+      };
+
+      // Maps category keys to Tailwind CSS border color classes for visual distinction
+      const CATEGORY_BORDER_COLORS = {
+        1: "border-accent-indigo", // Using the defined Tailwind color name
+        2: "border-accent-emerald",
+        3: "border-accent-amber",
+        4: "border-accent-rose",
+      };
+
+      // Default task data structure if none is found in local storage
+      // Structure: TaskName: { category_key, streak, last_top_percentage, total_time (seconds) }
+      let tasksData = {
+        Projects: {
+          category_key: 4,
+          streak: 0,
+          last_top_percentage: 95.2,
+          total_time: 9000,
+        }
+      };
+
+      // --- DOM Element References ---
+      const timerUI = document.getElementById("timer-ui");
+      const timerDisplay = document.getElementById("timer-display");
+      const progressBarInner = document.getElementById("progress-bar-inner");
+      const stopButton = document.getElementById("stop-button");
+      const statusMessage = document.getElementById("status-message");
+      const aheadMessage = document.getElementById("ahead-message");
+      const progressPercentageText = document.getElementById(
+        "progress-percentage"
+      );
+      const dateDisplay = document.getElementById("date-display");
+      const categoriesContainer = document.getElementById(
+        "categories-container"
+      );
+      const tasksJsonEditor = document.getElementById("tasks-json-editor");
+      const saveTasksButton = document.getElementById("save-tasks-button");
+
+      // --- Timer State & Variables ---
+      let timerInterval = null; // Holds the interval ID for the timer
+      let totalSeconds = 0; // Total duration of the current timer phase (work, break, etc.)
+      let currentSeconds = 0; // Remaining seconds in the current timer phase
+      let timerPhase = "idle"; // Current state: 'idle', 'warmup', 'work', 'break'
+      let currentTaskName = ""; // Name of the task currently being timed
+      let notificationPermission = Notification.permission; // Tracks browser notification permission status
+      let aheadPercentage = 70; // Simulated percentage of others you are "ahead of"
+      const populationEstimate = 500000; // Arbitrary large number for the "ahead of" calculation
+      // Short messages displayed periodically during work phase
+      const encouragementMessages = [
+        "Keep the momentum!",
+        "Focus mode: ON",
+        "You're doing great!",
+        "Making progress!",
+        "Stay sharp!",
+        "One step closer.",
+        "Consistency yields results.",
+        "Almost there!",
+        "Excellent focus!",
+        "Keep pushing!",
+      ];
+      let lastEncouragementIndex = -1; // Ensures variety in encouragement messages
+      let messageUpdateCounter = 0; // Counter to trigger periodic message updates
+
+      // --- Helper Functions ---
+
+      /**
+       * Formats seconds into MM:SS format.
+       * @param {number} seconds - The total seconds to format.
+       * @returns {string} The formatted time string (e.g., "05:30").
+       */
+      function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60)
+          .toString()
+          .padStart(2, "0");
+        const secs = (seconds % 60).toString().padStart(2, "0");
+        return `${mins}:${secs}`;
+      }
+
+      /**
+       * Formats a large number into a compact string (e.g., 1500 -> 1k, 1200000 -> 1.2M).
+       * @param {number} num - The number to format.
+       * @returns {string} The formatted number string.
+       */
+      function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+        if (num >= 1000) return (num / 1000).toFixed(0) + "k";
+        return num.toString();
+      }
+
+      /**
+       * Formats total seconds into a human-readable duration (e.g., 90s -> 1m, 3660s -> 1h 1m).
+       * @param {number} seconds - The total seconds.
+       * @returns {string} The formatted duration string.
+       */
+      function formatTotalTime(seconds) {
+        if (seconds < 60) return `${seconds}s`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+        return `${Math.floor(seconds / 3600)}h ${Math.floor(
+          (seconds % 3600) / 60
+        )}m`;
+      }
+
+      // --- UI Update Functions ---
+
+      /**
+       * Updates the timer display (MM:SS) and the browser tab title.
+       */
+      function updateTimerDisplay() {
+        timerDisplay.textContent = formatTime(currentSeconds);
+        // Update browser title to show time remaining during active phases
+        if (timerPhase !== "idle") {
+          document.title = `${formatTime(
+            currentSeconds
+          )} - ${currentTaskName} | Focus Timer`;
+        } else {
+          document.title = "Minimal Task Timer"; // Reset title when idle
+        }
+      }
+
+      /**
+       * Updates the progress bar width and the percentage text.
+       * Also updates the "ahead of" message during work/warmup phases.
+       */
+      function updateProgressBarAndMessages() {
+        let percentage = 0;
+        // Calculate completion percentage (time elapsed / total time)
+        if (totalSeconds > 0) {
+          percentage = ((totalSeconds - currentSeconds) / totalSeconds) * 100;
+        }
+        const displayPercentage = Math.max(
+          0,
+          Math.min(100, Math.round(percentage))
+        );
+        progressBarInner.style.width = `${displayPercentage}%`;
+        progressPercentageText.textContent = `${displayPercentage}%`;
+
+        // Update the "Ahead of X%" message during active work/warmup
+        if (
+          (timerPhase === "work" || timerPhase === "warmup") &&
+          totalSeconds > 0
+        ) {
+          // Simulate the "ahead percentage" slightly increasing over time
+          aheadPercentage = Math.min(
+            99.8,
+            aheadPercentage + Math.random() * 0.05
+          );
+          const aheadCount = Math.floor(
+            populationEstimate * (1 - aheadPercentage / 100)
+          );
+          aheadMessage.textContent = `Ahead of ${aheadPercentage.toFixed(
+            1
+          )}% (~${formatNumber(aheadCount)})`;
+          aheadMessage.style.opacity = 1; // Make message visible
+        } else {
+          aheadMessage.style.opacity = 0; // Hide message when not working/warming up
+          // Clear text instantly to prevent lingering text during fade-out
+          // (optional, depends on desired effect)
+          setTimeout(() => {
+            if (aheadMessage.style.opacity === "0")
+              aheadMessage.textContent = "";
+          }, 300);
+        }
+      }
+
+      /**
+       * Updates the main status message in the timer UI.
+       * Can display specific messages, random encouragement, or default phase messages.
+       * @param {string|null} message - A specific message to display.
+       * @param {boolean} [isEncouragement=false] - If true, displays a random encouragement message.
+       */
+      function updateStatusMessage(message = null, isEncouragement = false) {
+        let newMessage = "";
+        if (message) {
+          newMessage = message;
+        } else if (
+          isEncouragement &&
+          (timerPhase === "work" || timerPhase === "warmup")
+        ) {
+          // Select a random encouragement message, avoiding immediate repetition
+          let randomIndex;
+          do {
+            randomIndex = Math.floor(
+              Math.random() * encouragementMessages.length
+            );
+          } while (
+            randomIndex === lastEncouragementIndex &&
+            encouragementMessages.length > 1
+          );
+          lastEncouragementIndex = randomIndex;
+          newMessage = encouragementMessages[randomIndex];
+        } else if (timerPhase === "work") {
+          newMessage = `Focus: ${currentTaskName}`;
+        } else if (timerPhase === "warmup") {
+          newMessage = `Warmup: ${currentTaskName}`;
+        } else if (timerPhase === "break") {
+          newMessage = `Break Time! Relax...`;
+        } else {
+          newMessage = "Select a task."; // Default idle message
+        }
+        statusMessage.textContent = newMessage;
+      }
+
+      // --- Web Notification Logic ---
+
+      /**
+       * Requests permission from the user to show notifications if not already granted or denied.
+       */
+      function requestNotificationPermission() {
+        if (notificationPermission === "default") {
+          // Only ask if permission hasn't been set
+          Notification.requestPermission().then((permission) => {
+            notificationPermission = permission; // Update status
+            if (permission === "granted") {
+              // Optionally show a confirmation notification
+              new Notification("Notifications Enabled!", {
+                body: "You will now receive timer alerts.",
+                silent: true,
+                tag: "permission-status",
+              });
+            }
+          });
+        }
+      }
+
+      /**
+       * Shows a browser notification if permission is granted and the window is not focused.
+       * @param {string} title - The notification title.
+       * @param {string} body - The notification body text.
+       */
+      function showNotification(title, body) {
+        if (notificationPermission === "granted") {
+          const notificationTag = "task-timer-alert"; // Use a tag to prevent multiple similar notifications stacking up
+          // Only show notification if the tab/window is not currently active
+          if (document.hidden) {
+            new Notification(title, {
+              body: body,
+              tag: notificationTag,
+              silent: false,
+            }); // silent: false makes it audible (usually)
+          }
+        }
+      }
+
+      // --- Timer Core Logic ---
+
+      /**
+       * Stops the currently running timer, clears the interval, and resets state.
+       * @param {boolean} [resetPhase=true] - If true, sets timerPhase to 'idle' and hides the timer UI.
+       */
+      function stopTimer(resetPhase = true) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        if (resetPhase) {
+          timerPhase = "idle";
+          // Hide timer UI with animation
+          timerUI.style.opacity = 0;
+          timerUI.style.pointerEvents = "none";
+          timerUI.style.transform = "translateY(100%)"; // Slide down
+          updateStatusMessage("Select a task."); // Reset status message
+        }
+        currentSeconds = 0;
+        totalSeconds = 0;
+        updateTimerDisplay(); // Update display to 00:00
+        updateProgressBarAndMessages(); // Reset progress bar
+      }
+
+      /**
+       * Starts the timer for a specific task and phase (warmup, work, break).
+       * @param {string} taskName - The name of the task to start.
+       * @param {'warmup' | 'work' | 'break'} phase - The phase to start.
+       */
+      function startTimer(taskName, phase) {
+        requestNotificationPermission(); // Ensure permission is requested if needed
+        clearInterval(timerInterval); // Clear any existing timer
+
+        // Show timer UI with animation
+        timerUI.style.opacity = 1;
+        timerUI.style.pointerEvents = "auto";
+        timerUI.style.transform = "translateY(0)"; // Slide up
+
+        currentTaskName = taskName;
+        timerPhase = phase;
+        aheadPercentage = 70 + Math.random() * 10; // Reset "ahead" percentage for new session
+        messageUpdateCounter = 0; // Reset encouragement message counter
+
+        // Define durations for each phase (in seconds)
+        const warmupDuration = 60; // 1 minute
+        const workDuration = 24 * 60; // 24 minutes (Pomodoro-like)
+        const breakDuration = 5 * 60; // 5 minutes
+
+        let initialMessage = "";
+        // Set total time and initial message based on the phase
+        if (phase === "warmup") {
+          totalSeconds = warmupDuration;
+          initialMessage = `Warmup: ${taskName}...`;
+        } else if (phase === "work") {
+          totalSeconds = workDuration;
+          initialMessage = `Focus: ${taskName}...`;
+        } else if (phase === "break") {
+          totalSeconds = breakDuration;
+          initialMessage = `Break Time! Relax...`;
+        } else {
+          console.error("Invalid timer phase:", phase);
+          return; // Exit if phase is invalid
+        }
+
+        currentSeconds = totalSeconds; // Set the starting time
+        updateTimerDisplay();
+        updateProgressBarAndMessages();
+        updateStatusMessage(initialMessage);
+
+        // Start the countdown interval (runs every second)
+        timerInterval = setInterval(() => {
+          currentSeconds--;
+          messageUpdateCounter++;
+          updateTimerDisplay();
+          updateProgressBarAndMessages();
+
+          // Display an encouragement message periodically during work phase (e.g., every 45 seconds)
+          if (
+            timerPhase === "work" &&
+            currentSeconds > 0 &&
+            messageUpdateCounter >= 45
+          ) {
+            updateStatusMessage(null, true); // Show random encouragement
+            messageUpdateCounter = 0; // Reset counter
+          }
+
+          // Check if the timer has reached zero
+          if (currentSeconds <= 0) {
+            clearInterval(timerInterval); // Stop the interval
+            handleTimerCompletion(); // Handle phase transition or completion
+          }
+        }, 1000); // 1000ms = 1 second
+      }
+
+      /**
+       * Handles the logic when a timer phase (warmup, work, break) completes.
+       * Updates task stats, shows notifications, and transitions to the next phase.
+       */
+      function handleTimerCompletion() {
+        let notificationTitle = "";
+        let notificationBody = "";
+        let completionMessage = "";
+
+        if (timerPhase === "warmup") {
+          // Warmup finished -> Start work phase
+          notificationTitle = "Warm-up Done!";
+          notificationBody = `Starting ${currentTaskName} focus.`;
+          completionMessage = `Starting focus: ${currentTaskName}`;
+          showNotification(notificationTitle, notificationBody);
+          updateStatusMessage(completionMessage);
+          startTimer(currentTaskName, "work"); // Automatically start work phase
+        } else if (timerPhase === "work") {
+          // Work phase finished -> Update stats & start break
+          if (tasksData[currentTaskName]) {
+            // Update task data: increment streak, save performance, add time
+            tasksData[currentTaskName].streak += 1;
+            tasksData[currentTaskName].last_top_percentage = parseFloat(
+              aheadPercentage.toFixed(1)
+            ); // Save recorded percentage
+            tasksData[currentTaskName].total_time += totalSeconds; // Add the *completed* duration
+            saveTasksToLocalStorage(); // Persist changes
+            renderCategories(); // Refresh UI to show updated streak/time
+          }
+
+          notificationTitle = "Focus Complete!";
+          notificationBody = `Nice work on ${currentTaskName}! Break time.`;
+          completionMessage = `Completed ${currentTaskName}! Take a break.`;
+          showNotification(notificationTitle, notificationBody);
+          updateStatusMessage(completionMessage);
+          startTimer(currentTaskName, "break"); // Automatically start break phase
+        } else if (timerPhase === "break") {
+          // Break finished -> Stop timer, prompt user for next action
+          notificationTitle = "Break Over!";
+          notificationBody = `Ready for the next task?`;
+          completionMessage = "Break's over! Select next task.";
+          showNotification(notificationTitle, notificationBody);
+          // Stop the timer but keep the UI visible to show the completion message
+          stopTimer(false); // Don't reset phase/hide UI immediately
+          timerUI.style.opacity = 1; // Ensure UI stays visible
+          timerUI.style.pointerEvents = "auto";
+          timerUI.style.transform = "translateY(0)";
+          updateStatusMessage(completionMessage); // Show break over message
+          // User needs to manually select the next task
+        }
+      }
+
+      // --- Data Storage Functions ---
+
+      /**
+       * Loads task data from browser Local Storage. If not found, uses the default data.
+       * Populates the JSON editor textarea.
+       */
+      function loadTasksFromLocalStorage() {
+        const savedTasks = localStorage.getItem("tasksData");
+        if (savedTasks) {
+          try {
+            tasksData = JSON.parse(savedTasks);
+          } catch (e) {
+            console.error("Error parsing tasks data from localStorage:", e);
+            // Optionally fallback to default data or show an error to the user
+            alert("Error loading saved tasks. Using default data.");
+            tasksData = { ...tasksData }; // Ensure it's a copy of the default if needed
+          }
+        }
+        // Update the JSON editor content regardless of load success/failure
+        tasksJsonEditor.value = JSON.stringify(tasksData, null, 2); // Pretty print JSON
+      }
+
+      /**
+       * Saves the current tasksData object to Local Storage as a JSON string.
+       * Also updates the JSON editor textarea.
+       */
+      function saveTasksToLocalStorage() {
+        try {
+          localStorage.setItem("tasksData", JSON.stringify(tasksData));
+          tasksJsonEditor.value = JSON.stringify(tasksData, null, 2); // Keep editor in sync
+        } catch (e) {
+          console.error("Error saving tasks data to localStorage:", e);
+          alert(
+            "Could not save tasks. Local storage might be full or unavailable."
+          );
+        }
+      }
+
+      // --- UI Rendering Functions ---
+
+      /**
+       * Renders the category columns and the tasks within them based on the current tasksData.
+       * Clears existing content and rebuilds the UI.
+       */
+      function renderCategories() {
+        categoriesContainer.innerHTML = ""; // Clear previous content
+
+        // Group tasks by their category key
+        const tasksByCategory = {};
+        for (const key in CATEGORY_MAPPING) {
+          tasksByCategory[key] = []; // Initialize empty array for each category
+        }
+
+        // Populate the category groups
+        for (const [taskName, details] of Object.entries(tasksData)) {
+          const categoryKey = details.category_key;
+          if (tasksByCategory[categoryKey]) {
+            tasksByCategory[categoryKey].push({
+              name: taskName,
+              streak: details.streak || 0, // Default to 0 if undefined
+              last_top_percentage: details.last_top_percentage || 0,
+              total_time: details.total_time || 0,
+            });
+          } else {
+            console.warn(
+              `Task "${taskName}" has an invalid category key: ${categoryKey}`
+            );
+          }
+        }
+
+        // Create and append HTML for each category column
+        for (const categoryKey in CATEGORY_MAPPING) {
+          const categoryName = CATEGORY_MAPPING[categoryKey];
+          const borderColorClass =
+            CATEGORY_BORDER_COLORS[categoryKey] || "border-dark-border"; // Fallback border
+          const tasks = tasksByCategory[categoryKey];
+
+          // Create the main column div
+          const categoryColumn = document.createElement("div");
+          // Add animation class for staggered loading effect
+          categoryColumn.className = `category-column bg-dark-card rounded-category-col border-t-4 ${borderColorClass} flex flex-col min-h-[250px] slide-up-fade-in`;
+          // Category Header
+          const categoryHeader = document.createElement("div");
+          categoryHeader.className =
+            "p-4 border-b border-dark-border flex-shrink-0";
+          categoryHeader.innerHTML = `<h2 class="text-lg font-semibold text-dark-text text-center tracking-wide">${categoryName}</h2>`;
+          categoryColumn.appendChild(categoryHeader);
+
+          // Container for tasks within this category
+          const tasksContainer = document.createElement("div");
+          tasksContainer.className = "p-4 space-y-3 overflow-y-auto flex-grow"; // Allows scrolling if tasks overflow
+
+          // Create and add each task item
+          if (tasks.length > 0) {
+            tasks.forEach((task) => {
+              const taskItem = document.createElement("div");
+              // Add animation class
+              taskItem.className =
+                "task-item bg-dark-card-hover p-3 rounded-task-item hover:bg-opacity-80 cursor-pointer border border-dark-border";
+              taskItem.setAttribute("data-task-name", task.name); // Store task name for click handler
+
+              // Build the inner HTML for the task item
+              let taskInfoHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-base text-dark-text block truncate pr-2">${task.name}</span>
+                    `;
+
+              // Display streak counter if streak > 0
+              if (task.streak > 0) {
+                taskInfoHTML += `
+                            <span class="text-sm text-amber-400 font-medium flex items-center gap-0.5 ml-2 flex-shrink-0" title="Current Streak: ${task.streak}">
+                                <span class="text-base">🔥</span>
+                                <span>${task.streak}</span>
+                            </span>
+                        `;
+              }
+
+              taskInfoHTML += `</div>`; // Close flex container
+
+              // Display secondary info (last performance, total time) if available
+              if (task.last_top_percentage > 0 || task.total_time > 0) {
+                taskInfoHTML += `<div class="mt-1 flex justify-between text-xs text-dark-text-light">`;
+                if (task.last_top_percentage > 0) {
+                  taskInfoHTML += `<span title="Last Session Performance">Last: Top ${task.last_top_percentage.toFixed(
+                    1
+                  )}%</span>`;
+                } else {
+                  taskInfoHTML += `<span></span>`; // Keep alignment if no percentage
+                }
+                if (task.total_time > 0) {
+                  taskInfoHTML += `<span title="Total Time Tracked">${formatTotalTime(
+                    task.total_time
+                  )}</span>`;
+                }
+                taskInfoHTML += `</div>`;
+              } else {
+                // Add a placeholder div with non-breaking space to maintain height consistency
+                taskInfoHTML += `<div class="mt-1 text-xs h-[1em]"> </div>`;
+              }
+
+              taskItem.innerHTML = taskInfoHTML;
+              tasksContainer.appendChild(taskItem);
+
+              // Add click event listener to start the timer for this task
+              taskItem.addEventListener("click", () => {
+                const taskNameToStart = taskItem.getAttribute("data-task-name");
+                stopTimer(false); // Stop current timer without fully resetting UI state
+                startTimer(taskNameToStart, "warmup"); // Start new timer with warmup phase
+              });
+            });
+          } else {
+            // Display message if no tasks are in this category
+            tasksContainer.innerHTML = `<p class="text-sm text-center text-dark-text-light italic mt-6 px-2">No tasks in this category.</p>`;
+          }
+
+          categoryColumn.appendChild(tasksContainer);
+          categoriesContainer.appendChild(categoryColumn); // Add the completed column to the grid
+        }
+      }
+
+      // --- Event Listeners ---
+
+      // Stop Button: Clears the timer and resets to idle state.
+      stopButton.addEventListener("click", () => {
+        const stoppedTask = currentTaskName; // Remember task name before resetting
+        const stoppedPhase = timerPhase; // Remember phase
+        stopTimer(); // Full reset to idle
+        // Provide context if a task was actively stopped
+        if (stoppedPhase !== "idle" && stoppedPhase !== "break") {
+          updateStatusMessage(`Stopped ${stoppedTask}. Select task.`);
+        }
+      });
+
+      // Save Tasks Button: Parses JSON from editor, updates data, saves, and re-renders.
+      saveTasksButton.addEventListener("click", () => {
+        try {
+          const newTasksData = JSON.parse(tasksJsonEditor.value);
+          // Basic validation could be added here (e.g., check structure)
+          tasksData = newTasksData; // Update in-memory data
+          saveTasksToLocalStorage(); // Persist the changes
+          renderCategories(); // Re-render the UI with new data
+          alert("Tasks saved successfully!");
+        } catch (e) {
+          console.error("Error saving tasks from JSON editor:", e);
+          alert(
+            "Error saving tasks: Invalid JSON format. Please check the syntax.\n\n" +
+              e.message
+          );
+        }
+      });
+
+      // --- Initialization ---
+
+      /**
+       * Initializes the application on page load.
+       * Sets the date, loads tasks, renders the UI, and sets initial timer state.
+       */
+      function initialize() {
+        // Display the current date in the header
+        const now = new Date();
+        const options = {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        };
+        dateDisplay.textContent = `Today is ${now.toLocaleDateString(
+          "en-US",
+          options
+        )}`;
+
+        // Load task data from local storage (or use defaults)
+        loadTasksFromLocalStorage();
+
+        // Render the categories and tasks onto the page
+        renderCategories();
+
+        // Set the initial timer display (00:00) and progress bar state
+        updateTimerDisplay();
+        updateProgressBarAndMessages();
+
+        // Ensure timer UI is initially hidden (as set in HTML/CSS)
+        // The 'translate-y-full' and 'opacity-0' classes handle this
+      }
+
+      // --- Run Initialization ---
+      initialize();
+    </script>
+  </body>
+</html>
